@@ -13,11 +13,11 @@ st.title("🏥 Sistema Médico Hospitalario")
 def conectar():
     try:
         conn = mysql.connector.connect(
-            host="nozomi.proxy.rlwy.net",
-            port=39267,
-            user="root",
-            password="RIcZDpRThXVrkfwKgACLDbakSLIKcfmG",
-            database="railway"
+            host=st.secrets["DB_HOST"],
+            port=st.secrets["DB_PORT"],
+            user=st.secrets["DB_USER"],
+            password=st.secrets["DB_PASSWORD"],
+            database=st.secrets["DB_NAME"]
         )
         return conn
     except mysql.connector.Error as err:
@@ -211,3 +211,4 @@ else:
                 st.info("ℹ️ No hay registros todavía.")
         except Exception as e:
             st.error(f"❌ Error al cargar los datos: {e}")
+
