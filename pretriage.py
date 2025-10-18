@@ -162,13 +162,16 @@ else:
     elif st.session_state.rol == "Doctor":
         st.header("👨‍⚕️ Panel del Doctor — Revisión y Control de Pacientes")
 
+        st.caption("🔄 La tabla se actualiza automáticamente cada 10 s sin reiniciar la sesión.")
+        st_autorefresh(interval=10000, key="refresh_tabla")
+
         try:
             conn = conectar()
             df = pd.read_sql("SELECT * FROM pre_triage", conn)
             conn.close()
 
             if not df.empty:
-                columnas_prioritarias = ["id", "FechaHora","Nombre","Prioridad", "Estado", "PreDiagnostico"]
+                columnas_prioritarias = ["id", "Prioridad", "Estado", "PreDiagnostico"]
                 otras = [c for c in df.columns if c not in columnas_prioritarias]
                 df = df[[col for col in columnas_prioritarias if col in df.columns] + otras]
 
