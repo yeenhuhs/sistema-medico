@@ -39,17 +39,15 @@ def login(usuario, contrasena):
         return user
     return None
 
-# --- REGISTRAR USUARIO (SIN REPETIDOS) ---
+# --- REGISTRAR USUARIO ---
 def registrar_usuario(usuario, contrasena, rol):
     try:
         conn = conectar()
         cursor = conn.cursor()
-
         cursor.execute("SELECT id FROM users WHERE usuario = %s", (usuario,))
         existente = cursor.fetchone()
         if existente:
             return {"status": "error", "mensaje": "⚠️ El nombre de usuario ya está registrado."}
-
         cursor.execute(
             "INSERT INTO users (usuario, password, role) VALUES (%s, %s, %s)",
             (usuario, hash_contrasena(contrasena), rol)
@@ -147,7 +145,7 @@ else:
                         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         nombre, edad, sexo, peso, altura, pulso, spo2,
                         temperatura, presion, enfermedades, alergias,
-                        cirugias, medicacion, observaciones, "Pendiente"  # 👈 Estado por defecto
+                        cirugias, medicacion, observaciones, "Pendiente"
                     )
                     cursor.execute(sql, valores)
                     conn.commit()
@@ -164,21 +162,22 @@ else:
     elif st.session_state.rol == "Doctor":
         st.header("👨‍⚕️ Panel del Doctor — Revisión y Control de Pacientes")
 
-        # 🔁 Refresco automático cada 10 segundos
-        st_autorefresh(interval=10000, key="datarefresh")
-        st.caption("🔄 La tabla se actualiza automáticamente cada 10 segundos.")
-
         try:
             conn = conectar()
             df = pd.read_sql("SELECT * FROM pre_triage", conn)
             conn.close()
 
             if not df.empty:
+                columnas_prioritarias = ["id", "FechaHora","Nombre","Prioridad", "Estado", "PreDiagnostico"]
+                otras = [c for c in df.columns if c not in columnas_prioritarias]
+                df = df[[col for col in columnas_prioritarias if col in df.columns] + otras]
+
+                # --- Filtros ---
                 with st.expander("🔍 Filtros"):
                     col1, col2, col3 = st.columns(3)
                     filtro_nombre = col1.text_input("Buscar por nombre")
-                    filtro_prioridad = col2.selectbox("Filtrar por prioridad", ["Todos", "Baja", "Media", "Alta", "Inmediata"])
-                    filtro_estado = col3.selectbox("Filtrar por estado", ["Todos", "Pendiente", "Atendido"])
+                    filtro_prioridad = col2.selectbox("Filtrar por prioridad", ["Todos", "Normal", "Prioritaria", "Inmediata"])
+                    filtro_estado = col3.selectbox("Filtrar por estado", ["Todos", "Pendiente", "En Atención", "Atendido"])
 
                     if filtro_nombre:
                         df = df[df["Nombre"].str.contains(filtro_nombre, case=False, na=False)]
@@ -187,28 +186,35 @@ else:
                     if filtro_estado != "Todos":
                         df = df[df["Estado"] == filtro_estado]
 
-                st.dataframe(df, use_container_width=True)
+                # --- Tabla editable (solo Estado) ---
+                edited_df = st.data_editor(
+                    df,
+                    use_container_width=True,
+                    hide_index=True,
+                    disabled=[col for col in df.columns if col != "Estado"],
+                    column_config={
+                        "id": st.column_config.Column("ID", width="small", pinned="left"),
+                        "Estado": st.column_config.SelectboxColumn(
+                            "Estado",
+                            options=["Pendiente", "En Atención", "Atendido"],
+                            help="Haz clic para cambiar el estado del paciente"
+                        )
+                    }
+                )
 
-                st.subheader("✏️ Actualizar Estado del Paciente")
-                id_paciente = st.number_input("ID del registro a actualizar", min_value=1, step=1)
-                nuevo_estado = st.selectbox("Nuevo estado", ["Pendiente", "Atendido"])
-
-                if st.button("Actualizar registro"):
-                    try:
+                # --- Guardar cambios de Estado ---
+                if not edited_df.equals(df):
+                    cambios = edited_df[edited_df["Estado"] != df["Estado"]]
+                    if not cambios.empty:
                         conn = conectar()
                         cursor = conn.cursor()
-                        cursor.execute(
-                            "UPDATE pre_triage SET Estado=%s WHERE id=%s",
-                            (nuevo_estado, id_paciente)
-                        )
+                        for _, fila in cambios.iterrows():
+                            cursor.execute("UPDATE pre_triage SET Estado=%s WHERE id=%s", (fila["Estado"], fila["id"]))
                         conn.commit()
                         conn.close()
-                        st.success("✅ Registro actualizado correctamente.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error al actualizar: {e}")
+                        st.toast("✅ Estado actualizado correctamente.", icon="✅")
+
             else:
                 st.info("ℹ️ No hay registros todavía.")
         except Exception as e:
             st.error(f"❌ Error al cargar los datos: {e}")
-
