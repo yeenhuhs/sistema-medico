@@ -162,7 +162,7 @@ else:
     elif st.session_state.rol == "Doctor":
         st.header("👨‍⚕️ Panel del Doctor — Revisión y Control de Pacientes")
 
-        st.caption("🔄 La tabla se actualiza automáticamente cada 10 s sin reiniciar la sesión.")
+        st.caption("🔄 La tabla se actualiza automáticamente cada 10s")
         st_autorefresh(interval=10000, key="refresh_tabla")
 
         try:
@@ -221,4 +221,5 @@ else:
                 st.info("ℹ️ No hay registros todavía.")
         except Exception as e:
             st.error(f"❌ Error al cargar los datos: {e}")
+
 
