@@ -171,7 +171,7 @@ else:
             conn.close()
 
             if not df.empty:
-                columnas_prioritarias = ["id", "Prioridad", "Estado", "PreDiagnostico"]
+                columnas_prioritarias = ["id", "FechaHora","Nombre","Prioridad", "Estado", "PreDiagnostico"]
                 otras = [c for c in df.columns if c not in columnas_prioritarias]
                 df = df[[col for col in columnas_prioritarias if col in df.columns] + otras]
 
@@ -221,3 +221,4 @@ else:
                 st.info("ℹ️ No hay registros todavía.")
         except Exception as e:
             st.error(f"❌ Error al cargar los datos: {e}")
+
