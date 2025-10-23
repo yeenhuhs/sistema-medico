@@ -3,7 +3,7 @@ import pandas as pd
 import mysql.connector
 import hashlib
 from datetime import datetime
-from streamlit_autorefresh import st_autorefresh  # 👈 asegúrate de instalarlo: pip install streamlit-autorefresh
+from streamlit_autorefresh import st_autorefresh 
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Sistema Médico", page_icon="🏥", layout="wide")
@@ -65,7 +65,7 @@ if "rol" not in st.session_state:
     st.session_state.rol = None
 
 # ================================================================
-# 🔐 LOGIN / REGISTRO
+# LOGIN
 # ================================================================
 if not st.session_state.usuario:
     menu_inicio = st.sidebar.selectbox("Menú", ["Iniciar sesión", "Crear cuenta nueva"])
@@ -97,7 +97,7 @@ if not st.session_state.usuario:
                 st.warning(resultado["mensaje"])
 
 # ================================================================
-# 🧑‍⚕️ PANEL PRINCIPAL
+#  PANEL PRINCIPAL
 # ================================================================
 else:
     st.sidebar.write(f"👋 Bienvenido, **{st.session_state.usuario}** ({st.session_state.rol})")
@@ -107,7 +107,7 @@ else:
         st.rerun()
 
     # ================================================================
-    # 🧑‍⚕️ PANEL DE ENFERMERO
+    # PANEL DE ENFERMERO
     # ================================================================
     if st.session_state.rol == "Enfermero":
         st.header("🧑‍⚕️ Registro de Pacientes (Enfermería)")
@@ -157,7 +157,7 @@ else:
                 st.error("⚠️ Debes ingresar al menos el nombre del paciente.")
 
     # ================================================================
-    # 👨‍⚕️ PANEL DE DOCTOR
+    #  PANEL DE DOCTOR
     # ================================================================
     elif st.session_state.rol == "Doctor":
         st.header("👨‍⚕️ Panel del Doctor — Revisión y Control de Pacientes")
@@ -221,5 +221,6 @@ else:
                 st.info("ℹ️ No hay registros todavía.")
         except Exception as e:
             st.error(f"❌ Error al cargar los datos: {e}")
+
 
 
