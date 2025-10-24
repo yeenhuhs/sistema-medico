@@ -29,7 +29,6 @@ def conectar():
 def hash_contrasena(contrasena):
     return hashlib.sha256(contrasena.encode()).hexdigest()
 
-
 # --- LOGIN ---
 def login(usuario, contrasena):
     conn = conectar()
@@ -40,7 +39,6 @@ def login(usuario, contrasena):
     if user and user["password"] == hash_contrasena(contrasena):
         return user
     return None
-
 
 # --- REGISTRAR USUARIO ---
 def registrar_usuario(usuario, contrasena, rol):
@@ -63,13 +61,11 @@ def registrar_usuario(usuario, contrasena, rol):
     except Exception as e:
         return {"status": "error", "mensaje": f"❌ Error al registrar usuario: {e}"}
 
-
 # --- OBTENER TEMPERATURA DESDE API ---
 def obtener_temperatura_api():
     try:
         url = "https://web-production-fbcc6.up.railway.app/ultimo"
         response = requests.get(url, timeout=10)
-
         if response.status_code == 200:
             data = response.text.strip()
             try:
@@ -81,7 +77,6 @@ def obtener_temperatura_api():
     except Exception as e:
         st.warning(f"⚠️ No se pudo conectar a la API: {e}")
     return None
-
 
 # --- SESIÓN ---
 if "usuario" not in st.session_state:
@@ -157,7 +152,6 @@ else:
 
             temperatura_actual = st.session_state.temperatura_api
 
-            # --- Indicador de cambio de temperatura ---
             diff = temperatura_actual - st.session_state.ultima_temp
             if abs(diff) >= 1:
                 emoji = "🔺" if diff > 0 else "🔻"
@@ -174,7 +168,6 @@ else:
         else:
             temperatura_actual = 0.0
 
-        # --- FORMULARIO DE REGISTRO ---
         with st.form("formulario_enfermero"):
             nombre = st.text_input("👤 Nombre completo")
             edad = st.number_input("🎂 Edad", min_value=0, max_value=120, step=1)
@@ -221,6 +214,78 @@ else:
                     st.error(f"❌ Error al guardar: {e}")
             else:
                 st.error("⚠️ Debes ingresar al menos el nombre del paciente.")
+
+    # ================================================================
+    # 👨‍⚕ PANEL DE DOCTOR
+    # ================================================================
+    elif st.session_state.rol == "Doctor":
+        st.header("👨‍⚕ Panel del Doctor — Revisión y Control de Pacientes")
+
+        st.caption("🔄 La tabla se actualiza automáticamente cada 10s")
+        st_autorefresh(interval=10000, key="refresh_tabla")
+
+        try:
+            conn = conectar()
+            df = pd.read_sql("SELECT * FROM pre_triage", conn)
+            conn.close()
+
+            if not df.empty:
+                columnas_prioritarias = ["id", "FechaHora","Nombre","Prioridad", "Estado", "PreDiagnostico"]
+                otras = [c for c in df.columns if c not in columnas_prioritarias]
+                df = df[[col for col in columnas_prioritarias if col in df.columns] + otras]
+
+                # --- Filtros ---
+                with st.expander("🔍 Filtros", expanded=True):
+                    col1, col2, col3 = st.columns(3)
+                    filtro_nombre = col1.text_input("Buscar por nombre")
+                    filtro_prioridad = col2.selectbox("Filtrar por prioridad", ["Todos", "Normal", "Prioritaria", "Inmediata"])
+
+                    # 🔹 Estado "Pendiente" por defecto
+                    filtro_estado = col3.selectbox(
+                        "Filtrar por estado",
+                        ["Todos", "Pendiente", "En Atención", "Atendido"],
+                        index=1  # 👈 Esto hace que "Pendiente" sea la opción seleccionada por defecto
+                    )
+
+                    if filtro_nombre:
+                        df = df[df["Nombre"].str.contains(filtro_nombre, case=False, na=False)]
+                    if filtro_prioridad != "Todos" and "Prioridad" in df.columns:
+                        df = df[df["Prioridad"] == filtro_prioridad]
+                    if filtro_estado != "Todos":
+                        df = df[df["Estado"] == filtro_estado]
+
+                # --- Tabla editable (solo Estado) ---
+                edited_df = st.data_editor(
+                    df,
+                    use_container_width=True,
+                    hide_index=True,
+                    disabled=[col for col in df.columns if col != "Estado"],
+                    column_config={
+                        "id": st.column_config.Column("ID", width="small", pinned="left"),
+                        "Estado": st.column_config.SelectboxColumn(
+                            "Estado",
+                            options=["Pendiente", "En Atención", "Atendido"],
+                            help="Haz clic para cambiar el estado del paciente"
+                        )
+                    }
+                )
+
+                # --- Guardar cambios de Estado ---
+                if not edited_df.equals(df):
+                    cambios = edited_df[edited_df["Estado"] != df["Estado"]]
+                    if not cambios.empty:
+                        conn = conectar()
+                        cursor = conn.cursor()
+                        for _, fila in cambios.iterrows():
+                            cursor.execute("UPDATE pre_triage SET Estado=%s WHERE id=%s", (fila["Estado"], fila["id"]))
+                        conn.commit()
+                        conn.close()
+                        st.toast("✅ Estado actualizado correctamente.", icon="✅")
+
+            else:
+                st.info("ℹ No hay registros todavía.")
+        except Exception as e:
+            st.error(f"❌ Error al cargar los datos: {e}")
 
 
 
