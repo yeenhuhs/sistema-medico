@@ -3,6 +3,7 @@ import pandas as pd
 import mysql.connector
 import hashlib
 from datetime import datetime
+import requests
 from streamlit_autorefresh import st_autorefresh 
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
@@ -220,5 +221,6 @@ else:
                     st.error(f"❌ Error al guardar: {e}")
             else:
                 st.error("⚠️ Debes ingresar al menos el nombre del paciente.")
+
 
 
