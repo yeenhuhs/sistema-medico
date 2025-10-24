@@ -28,6 +28,7 @@ def conectar():
 def hash_contrasena(contrasena):
     return hashlib.sha256(contrasena.encode()).hexdigest()
 
+
 # --- LOGIN ---
 def login(usuario, contrasena):
     conn = conectar()
@@ -39,15 +40,18 @@ def login(usuario, contrasena):
         return user
     return None
 
+
 # --- REGISTRAR USUARIO ---
 def registrar_usuario(usuario, contrasena, rol):
     try:
         conn = conectar()
         cursor = conn.cursor()
+
         cursor.execute("SELECT id FROM users WHERE usuario = %s", (usuario,))
         existente = cursor.fetchone()
         if existente:
             return {"status": "error", "mensaje": "⚠️ El nombre de usuario ya está registrado."}
+
         cursor.execute(
             "INSERT INTO users (usuario, password, role) VALUES (%s, %s, %s)",
             (usuario, hash_contrasena(contrasena), rol)
@@ -58,14 +62,38 @@ def registrar_usuario(usuario, contrasena, rol):
     except Exception as e:
         return {"status": "error", "mensaje": f"❌ Error al registrar usuario: {e}"}
 
+
+# --- OBTENER TEMPERATURA DESDE API ---
+def obtener_temperatura_api():
+    try:
+        url = "https://web-production-fbcc6.up.railway.app/ultimo"
+        response = requests.get(url, timeout=10)
+
+        if response.status_code == 200:
+            data = response.text.strip()
+            try:
+                return float(data)
+            except ValueError:
+                st.warning(f"⚠️ La API devolvió un formato inesperado: {data}")
+        else:
+            st.warning(f"⚠️ Error al obtener datos de la API (HTTP {response.status_code})")
+    except Exception as e:
+        st.warning(f"⚠️ No se pudo conectar a la API: {e}")
+    return None
+
+
 # --- SESIÓN ---
 if "usuario" not in st.session_state:
     st.session_state.usuario = None
 if "rol" not in st.session_state:
     st.session_state.rol = None
+if "temperatura_api" not in st.session_state:
+    st.session_state.temperatura_api = 0.0
+if "ultima_temp" not in st.session_state:
+    st.session_state.ultima_temp = 0.0
 
 # ================================================================
-# LOGIN
+# 🔐 LOGIN / REGISTRO
 # ================================================================
 if not st.session_state.usuario:
     menu_inicio = st.sidebar.selectbox("Menú", ["Iniciar sesión", "Crear cuenta nueva"])
@@ -97,7 +125,7 @@ if not st.session_state.usuario:
                 st.warning(resultado["mensaje"])
 
 # ================================================================
-#  PANEL PRINCIPAL
+# 🧑‍⚕️ PANEL PRINCIPAL
 # ================================================================
 else:
     st.sidebar.write(f"👋 Bienvenido, **{st.session_state.usuario}** ({st.session_state.rol})")
@@ -107,10 +135,45 @@ else:
         st.rerun()
 
     # ================================================================
-    # PANEL DE ENFERMERO
+    # 🧑‍⚕️ PANEL DE ENFERMERO
     # ================================================================
     if st.session_state.rol == "Enfermero":
         st.header("🧑‍⚕️ Registro de Pacientes (Enfermería)")
+
+        modo = st.radio("🔧 Modo de ingreso de temperatura", ["Manual", "Automático"], horizontal=True)
+
+        temperatura_actual = 0.0
+
+        # --- MODO AUTOMÁTICO ---
+        if modo == "Automático":
+            st.info("🌡️ Modo automático activado — leyendo temperatura desde API cada 5 segundos.")
+            st_autorefresh(interval=5000, key="auto_temp_refresh")
+            temp_api = obtener_temperatura_api()
+
+            if temp_api:
+                st.session_state.ultima_temp = st.session_state.temperatura_api
+                st.session_state.temperatura_api = temp_api
+
+            temperatura_actual = st.session_state.temperatura_api
+
+            # --- Indicador de cambio de temperatura ---
+            diff = temperatura_actual - st.session_state.ultima_temp
+            if abs(diff) >= 1:
+                emoji = "🔺" if diff > 0 else "🔻"
+                st.metric(
+                    label="🌡️ Temperatura actual (desde API)",
+                    value=f"{temperatura_actual:.2f} °C",
+                    delta=f"{emoji} {diff:+.2f} °C"
+                )
+            else:
+                st.metric(
+                    label="🌡️ Temperatura actual (desde API)",
+                    value=f"{temperatura_actual:.2f} °C"
+                )
+        else:
+            temperatura_actual = 0.0
+
+        # --- FORMULARIO DE REGISTRO ---
         with st.form("formulario_enfermero"):
             nombre = st.text_input("👤 Nombre completo")
             edad = st.number_input("🎂 Edad", min_value=0, max_value=120, step=1)
@@ -119,7 +182,9 @@ else:
             altura = st.number_input("📏 Altura (cm)", min_value=0.0, step=0.1)
             pulso = st.number_input("❤️ Pulso (bpm)", min_value=0)
             spo2 = st.number_input("🫁 SpO₂ (%)", min_value=0, max_value=100, step=1)
-            temperatura = st.number_input("🌡️ Temperatura (°C)", min_value=0.0, step=0.1)
+            temperatura = st.number_input(
+                "🌡️ Temperatura (°C)", min_value=0.0, step=0.1, value=temperatura_actual
+            )
             presion = st.text_input("🩸 Presión arterial (ej: 120/80)")
             enfermedades = st.text_area("🧬 Enfermedades Crónicas")
             alergias = st.text_area("🤧 Alergias")
@@ -155,72 +220,5 @@ else:
                     st.error(f"❌ Error al guardar: {e}")
             else:
                 st.error("⚠️ Debes ingresar al menos el nombre del paciente.")
-
-    # ================================================================
-    #  PANEL DE DOCTOR
-    # ================================================================
-    elif st.session_state.rol == "Doctor":
-        st.header("👨‍⚕️ Panel del Doctor — Revisión y Control de Pacientes")
-
-        st.caption("🔄 La tabla se actualiza automáticamente cada 10s")
-        st_autorefresh(interval=10000, key="refresh_tabla")
-
-        try:
-            conn = conectar()
-            df = pd.read_sql("SELECT * FROM pre_triage", conn)
-            conn.close()
-
-            if not df.empty:
-                columnas_prioritarias = ["id", "FechaHora","Nombre","Prioridad", "Estado", "PreDiagnostico"]
-                otras = [c for c in df.columns if c not in columnas_prioritarias]
-                df = df[[col for col in columnas_prioritarias if col in df.columns] + otras]
-
-                # --- Filtros ---
-                with st.expander("🔍 Filtros"):
-                    col1, col2, col3 = st.columns(3)
-                    filtro_nombre = col1.text_input("Buscar por nombre")
-                    filtro_prioridad = col2.selectbox("Filtrar por prioridad", ["Todos", "Normal", "Prioritaria", "Inmediata"])
-                    filtro_estado = col3.selectbox("Filtrar por estado", ["Todos", "Pendiente", "En Atención", "Atendido"])
-
-                    if filtro_nombre:
-                        df = df[df["Nombre"].str.contains(filtro_nombre, case=False, na=False)]
-                    if filtro_prioridad != "Todos" and "Prioridad" in df.columns:
-                        df = df[df["Prioridad"] == filtro_prioridad]
-                    if filtro_estado != "Todos":
-                        df = df[df["Estado"] == filtro_estado]
-
-                # --- Tabla editable (solo Estado) ---
-                edited_df = st.data_editor(
-                    df,
-                    use_container_width=True,
-                    hide_index=True,
-                    disabled=[col for col in df.columns if col != "Estado"],
-                    column_config={
-                        "id": st.column_config.Column("ID", width="small", pinned="left"),
-                        "Estado": st.column_config.SelectboxColumn(
-                            "Estado",
-                            options=["Pendiente", "En Atención", "Atendido"],
-                            help="Haz clic para cambiar el estado del paciente"
-                        )
-                    }
-                )
-
-                # --- Guardar cambios de Estado ---
-                if not edited_df.equals(df):
-                    cambios = edited_df[edited_df["Estado"] != df["Estado"]]
-                    if not cambios.empty:
-                        conn = conectar()
-                        cursor = conn.cursor()
-                        for _, fila in cambios.iterrows():
-                            cursor.execute("UPDATE pre_triage SET Estado=%s WHERE id=%s", (fila["Estado"], fila["id"]))
-                        conn.commit()
-                        conn.close()
-                        st.toast("✅ Estado actualizado correctamente.", icon="✅")
-
-            else:
-                st.info("ℹ️ No hay registros todavía.")
-        except Exception as e:
-            st.error(f"❌ Error al cargar los datos: {e}")
-
 
 
